@@ -13,8 +13,8 @@ import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.Feed
 import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
+import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Shelf
-import dev.brahmkshatriya.echo.common.models.Shelf.Companion.toShelf
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toServerMedia
 import dev.brahmkshatriya.echo.common.models.Track
@@ -56,7 +56,7 @@ class Audiochan : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sea
     }
 
     private val sfwOnly: Boolean
-        get() = settings.getBoolean("sfwOnly", true)
+        get() = settings.getBoolean("sfwOnly") ?: true
 
     // Helper functions to map API model to Echo media models
     private fun AudiochanItem.toAlbum(): Album {
@@ -70,7 +70,7 @@ class Audiochan : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sea
         return Album(
             id = slug,
             title = title,
-            cover = avatar,
+            cover = avatar.toImageHolder(crop = true),
             description = description?.getPlainDescription() ?: "",
             artists = listOf(Artist(id = creator, name = creator)),
             extras = mapOf(
