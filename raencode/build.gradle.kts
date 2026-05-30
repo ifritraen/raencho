@@ -86,6 +86,71 @@ tasks {
     }
 }
 
+// Multi-extension configurations for raencode
+data class ExtConfig(
+    val id: String,
+    val className: String,
+    val name: String,
+    val description: String,
+    val iconUrl: String
+)
+
+val extensionsList = listOf(
+    ExtConfig(
+        id = "audiochan",
+        className = "dev.brahmkshatriya.echo.extension.Audiochan",
+        name = "Audiochan",
+        description = "Audiochan extension for Echo audio player.",
+        iconUrl = "https://audiochan.com/pwa/apple-touch-icon.v2.png"
+    ),
+    ExtConfig(
+        id = "audiolove",
+        className = "dev.brahmkshatriya.echo.extension.Audiolove",
+        name = "Audio.love",
+        description = "Audio.love extension for Echo audio player.",
+        iconUrl = "https://audio.love/favicon.ico"
+    )
+)
+
+extensionsList.forEach { ext ->
+    tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar_${ext.id}") {
+        group = "shadow"
+        description = "Create a shadow JAR for extension ${ext.name}"
+        
+        archiveBaseName.set(ext.id)
+        archiveClassifier.set("")
+        archiveVersion.set(verName)
+        
+        from(sourceSets.main.get().output)
+        configurations = listOf(project.configurations.runtimeClasspath.get())
+        
+        manifest {
+            attributes(
+                mapOf(
+                    "Extension-Id" to ext.id,
+                    "Extension-Type" to "music",
+                    "Extension-Class" to ext.className,
+                    "Extension-Version-Code" to verCode,
+                    "Extension-Version-Name" to verName,
+                    "Extension-Icon-Url" to ext.iconUrl,
+                    "Extension-Name" to ext.name,
+                    "Extension-Description" to ext.description,
+                    "Extension-Author" to "raencode",
+                    "Extension-Author-Url" to "https://github.com/itsmechinmoy/echo-extensions",
+                    "Extension-Repo-Url" to "",
+                    "Extension-Update-Url" to "https://raw.githubusercontent.com/itsmechinmoy/echo-extensions/main/echo_extensions.json"
+                )
+            )
+        }
+    }
+}
+
+val buildAllExtensions by tasks.registering {
+    group = "build"
+    description = "Build shadow JARs for all registered extensions"
+    dependsOn(extensionsList.map { "shadowJar_${it.id}" })
+}
+
 fun execute(vararg command: String): String = providers.exec {
     commandLine(*command)
 }.standardOutput.asText.get().trim()

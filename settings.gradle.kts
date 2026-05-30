@@ -15,7 +15,6 @@ dependencyResolutionManagement {
     }
 }
 
-val extName: String by settings
-rootProject.name = extName
+rootProject.name = "raencode"
 include(":app")
-include(":ext")
+include(":raencode")

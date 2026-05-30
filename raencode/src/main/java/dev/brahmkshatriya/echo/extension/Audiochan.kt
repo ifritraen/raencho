@@ -92,7 +92,16 @@ class Audiochan : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sea
             album = album,
             artists = album.artists,
             duration = durationMs,
-            extras = mapOf("slug" to slug)
+            extras = mapOf("slug" to slug),
+            streamables = listOf(
+                Streamable(
+                    id = slug,
+                    quality = 0,
+                    type = Streamable.MediaType.Server,
+                    title = title,
+                    extras = emptyMap()
+                )
+            )
         )
     }
 

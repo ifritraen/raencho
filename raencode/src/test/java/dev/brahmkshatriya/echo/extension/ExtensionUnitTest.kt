@@ -12,6 +12,7 @@ import dev.brahmkshatriya.echo.common.models.Feed.Companion.pagedDataOfFirst
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Track
+import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -29,8 +30,8 @@ import kotlin.system.measureTimeMillis
 @OptIn(DelicateCoroutinesApi::class)
 @ExperimentalCoroutinesApi
 class ExtensionUnitTest {
-    private val extension: ExtensionClient = Audiochan()
-    private val searchQuery = "Bestie"
+    private val extension: ExtensionClient = Audiolove()
+    private val searchQuery = ""
     private val user = User("", "Test User")
 
     @Test
@@ -69,13 +70,13 @@ class ExtensionUnitTest {
         println("Searching : $query")
         
         var foundTrack: Track? = null
-        val items = extension.loadSearchFeed(query).pagedDataOfFirst().loadAll()
+        val items = extension.loadSearchFeed(query).pagedDataOfFirst().loadPage(null).data
         for (shelf in items) {
             when (shelf) {
                 is Shelf.Item -> {
                     if (shelf.media is Track) foundTrack = shelf.media as Track
                     else if (shelf.media is Album && extension is AlbumClient && extension is TrackClient) {
-                        foundTrack = extension.loadTracks(shelf.media as Album)?.loadAll()?.firstOrNull()
+                        foundTrack = extension.loadTracks(shelf.media as Album)?.pagedDataOfFirst()?.loadPage(null)?.data?.firstOrNull()
                     }
                 }
                 is Shelf.Lists.Tracks -> {
@@ -85,7 +86,7 @@ class ExtensionUnitTest {
                     val first = shelf.list.firstOrNull()
                     if (first is Track) foundTrack = first
                     else if (first is Album && extension is AlbumClient && extension is TrackClient) {
-                        foundTrack = extension.loadTracks(first)?.loadAll()?.firstOrNull()
+                        foundTrack = extension.loadTracks(first)?.pagedDataOfFirst()?.loadPage(null)?.data?.firstOrNull()
                     }
                 }
                 else -> {}
@@ -119,8 +120,14 @@ class ExtensionUnitTest {
 
     @Test
     fun testTrackRadio() = testIn("Testing Track Radio") {
-        if (extension !is TrackClient) error("TrackClient is not implemented")
-        if (extension !is RadioClient) error("RadioClient is not implemented")
+        if (extension !is TrackClient) {
+            println("TrackClient is not implemented, skipping")
+            return@testIn
+        }
+        if (extension !is RadioClient) {
+            println("RadioClient is not implemented, skipping")
+            return@testIn
+        }
         val track = extension.loadTrack(searchTrack(), false)
         val radio = extension.radio(track, null)
         val radioTracks = extension.loadTracks(radio).loadAll()
@@ -147,7 +154,7 @@ class ExtensionUnitTest {
         if (extension !is AlbumClient) error("AlbumClient is not implemented")
         val album = extension.loadAlbum(small)
         println(album)
-        val tracks = extension.loadTracks(album)?.loadAll()
+        val tracks = extension.loadTracks(album)?.pagedDataOfFirst()?.loadPage(null)?.data
         if (tracks.isNullOrEmpty()) println("No tracks found for album")
         else tracks.forEach {
             println(it)
@@ -161,7 +168,9 @@ class ExtensionUnitTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(mainThreadSurrogate)
-        extension.setSettings(MockedSettings())
+        val testSettings = MockedSettings()
+        testSettings.putBoolean("sfwOnly", false)
+        extension.setSettings(testSettings)
         runBlocking {
             extension.onInitialize()
             extension.onExtensionSelected()

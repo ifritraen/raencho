@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":ext"))
+    implementation(project(":raencode"))
     compileOnly(libs.echo.common)
     compileOnly(libs.kotlin.stdlib)
 }
