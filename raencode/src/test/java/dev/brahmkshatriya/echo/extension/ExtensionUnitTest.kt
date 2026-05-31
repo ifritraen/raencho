@@ -30,9 +30,109 @@ import kotlin.system.measureTimeMillis
 @OptIn(DelicateCoroutinesApi::class)
 @ExperimentalCoroutinesApi
 class ExtensionUnitTest {
-    private val extension: ExtensionClient = Audiolove()
-    private val searchQuery = ""
+    private val extension: ExtensionClient = Hotaudio()
+    private val searchQuery = "Dragon"
     private val user = User("", "Test User")
+
+    @Test
+    fun testDecrypt() {
+        val encodedState = "yx6mFwDDDhQX+92h7KaAgRau/7pf2Qp5nrAtApsk2z8LGsGM6IDBPzT/4d24wEHKIFLpk/gGEZIyg40PT1SOMd5Fp2aS0PbIe0G2M1pVQbTbZ7wynIFz/Ri15p1mick3vSsDgD4xkjYx6UCiQxD6J0M2LnnGp53NsrpfpavBoN5bO1pZmMAoC/vB7wFRbsghK2DsHMKx7dOptZ7VpKhlLsaFF0MzX4tef99YbXmGTUpAOTzhZu76nswMfJ281D/1mFxmK56jYwscGV1+32I4g9JjR3DDxr5cRQzWazEGoJXIT2IkFP4ewouhZvakrKOBhKCepWzVRKpWzC9IVSqxS3yFy7HYvRZCKRlhcHmLY0Im9J+hzKpR8S0xi2MH8TI0kSrZppslCT3woVbiIEmdRQGvKOfpTlVBwhmnV7c1NE9+yjEDXFGNRbZYTFR8hflXriP5kbvnvKAq9AUS0CZW6g=="
+        val f = java.util.Base64.getDecoder().decode(encodedState)
+        val keyBytes = f.copyOfRange(f.size - 32, f.size)
+        val ciphertextBytes = f.copyOfRange(0, f.size - 32)
+        val nonceBytes = ByteArray(12)
+
+        val secretKey = javax.crypto.spec.SecretKeySpec(keyBytes, "ChaCha20")
+        val parameterSpec = javax.crypto.spec.IvParameterSpec(nonceBytes)
+        val cipher = javax.crypto.Cipher.getInstance("ChaCha20-Poly1305/None/NoPadding")
+        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey, parameterSpec)
+        val decryptedBytes = cipher.doFinal(ciphertextBytes)
+        val decryptedStr = String(decryptedBytes, Charsets.UTF_8)
+        println("DECRYPTED STATE: " + decryptedStr)
+
+        val payload = """{"tid":"58204","pid":"7042","key":"8kky42qz3xhrqwwdtyz5g4cj00","tick":"1smQXrl6tQ5qpdbJeS+mEbkeH1qMa","first":-1}"""
+        fun hashString(algo: String, input: String): String {
+            val bytes = java.security.MessageDigest.getInstance(algo).digest(input.toByteArray(Charsets.UTF_8))
+            return bytes.joinToString("") { "%02x".format(it) }
+        }
+        println("MD5: " + hashString("MD5", payload))
+        println("SHA-1: " + hashString("SHA-1", payload))
+        println("SHA-256: " + hashString("SHA-256", payload))
+
+        // Fetch nozzle.js and save its string table
+        val client = okhttp3.OkHttpClient()
+        val request = okhttp3.Request.Builder().url("https://hotaudio.net/nozzle.js?v=1J1Db0bF").build()
+        val response = client.newCall(request).execute()
+        val text = response.body?.string() ?: ""
+        val startToken = "G=function(){return["
+        val startIdx = text.indexOf(startToken)
+        if (startIdx != -1) {
+            val arrayStart = startIdx + startToken.length - 1
+            var depth = 0
+            var inString = false
+            var escaped = false
+            var endIdx = -1
+            for (i in arrayStart until text.length) {
+                val char = text[i]
+                if (escaped) {
+                    escaped = false
+                    continue
+                }
+                if (char == '\\') {
+                    escaped = true
+                    continue
+                }
+                if (char == '"') {
+                    inString = !inString
+                    continue
+                }
+                if (!inString) {
+                    if (char == '[') depth++
+                    if (char == ']') {
+                        depth--
+                        if (depth == 0) {
+                            endIdx = i
+                            break
+                        }
+                    }
+                }
+            }
+            val arrayStr = text.substring(arrayStart, endIdx + 1)
+            java.io.File("d:\\C\\p6\\echo-extension\\array_raw.txt").writeText(arrayStr)
+            println("Successfully saved array_raw.txt, length: ${arrayStr.length}")
+        } else {
+            println("G=function(){return[ not found!")
+        }
+    }
+
+    @Test
+    fun testX25519() {
+        val privA = dev.brahmkshatriya.echo.extension.hotaudio.X25519.generatePrivateKey()
+        val pubA = dev.brahmkshatriya.echo.extension.hotaudio.X25519.getPublicKey(privA)
+        val privB = dev.brahmkshatriya.echo.extension.hotaudio.X25519.generatePrivateKey()
+        val pubB = dev.brahmkshatriya.echo.extension.hotaudio.X25519.getPublicKey(privB)
+        
+        val secretA = dev.brahmkshatriya.echo.extension.hotaudio.X25519.calculateSharedSecret(privA, pubB)
+        val secretB = dev.brahmkshatriya.echo.extension.hotaudio.X25519.calculateSharedSecret(privB, pubA)
+        
+        val hexA = secretA.joinToString("") { "%02x".format(it) }
+        val hexB = secretB.joinToString("") { "%02x".format(it) }
+        println("Shared Secret A: $hexA")
+        println("Shared Secret B: $hexB")
+        assert(hexA == hexB) { "X25519 shared secrets do not match!" }
+    }
+
+    @Test
+    fun testHotaudioVm() {
+        val vm = dev.brahmkshatriya.echo.extension.hotaudio.HotaudioVm()
+        val signature1 = vm.sign("")
+        println("VM sign(\"\") => $signature1")
+        assert(signature1 == "9:00000000ffc1ca35fe3ade4123d3a912") { "Empty string signature mismatch!" }
+        
+        val signature2 = vm.sign("test")
+        println("VM sign(\"test\") => $signature2")
+        assert(signature2 == "9:000000004869b73ce1b893b419bc1585") { "\"test\" signature mismatch!" }
+    }
 
     @Test
     fun testEmptySearch() = testIn("Testing Empty Search") {

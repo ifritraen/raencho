@@ -9,6 +9,7 @@ plugins {
 dependencies {
     compileOnly(libs.echo.common)
     compileOnly(libs.kotlin.stdlib)
+    implementation(libs.jsoup)
 
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
@@ -109,6 +110,13 @@ val extensionsList = listOf(
         name = "Audio.love",
         description = "Audio.love extension for Echo audio player.",
         iconUrl = "https://audio.love/favicon.ico"
+    ),
+    ExtConfig(
+        id = "hotaudio",
+        className = "dev.brahmkshatriya.echo.extension.Hotaudio",
+        name = "HotAudio.net",
+        description = "HotAudio.net extension for Echo audio player.",
+        iconUrl = "https://hotaudio.net/icon.svg"
     )
 )
 

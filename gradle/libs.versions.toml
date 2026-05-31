@@ -9,6 +9,7 @@ echo-common = { module = "dev.brahmkshatriya.echo:common", version.ref = "echoCo
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 junit = { module = "junit:junit", version = "4.13.2" }
 coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version = "1.10.2" }
+jsoup = { module = "org.jsoup:jsoup", version = "1.18.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

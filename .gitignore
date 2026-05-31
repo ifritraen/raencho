@@ -7,3 +7,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Temp JS scripts & decompilation outputs
+/*.js
+/*.txt
+/*.json
+/roadmap.md
+/.agents/
