@@ -117,6 +117,13 @@ val extensionsList = listOf(
         name = "HotAudio.net",
         description = "HotAudio.net extension for Echo audio player.",
         iconUrl = "https://hotaudio.net/icon.svg"
+    ),
+    ExtConfig(
+        id = "literotica",
+        className = "dev.brahmkshatriya.echo.extension.Literotica",
+        name = "Literotica Audio",
+        description = "Literotica Audio extension for Echo audio player.",
+        iconUrl = "https://www.literotica.com/favicon.ico"
     )
 )
 

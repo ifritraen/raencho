@@ -7,6 +7,7 @@ import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.RadioClient
 import dev.brahmkshatriya.echo.common.clients.SearchFeedClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
+import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.models.Feed.Companion.loadAll
 import dev.brahmkshatriya.echo.common.models.Feed.Companion.pagedDataOfFirst
 import dev.brahmkshatriya.echo.common.models.Album
@@ -258,6 +259,25 @@ class ExtensionUnitTest {
         if (tracks.isNullOrEmpty()) println("No tracks found for album")
         else tracks.forEach {
             println(it)
+        }
+    }
+
+    @Test
+    fun testArtistGet() = testIn("Testing Artist Get") {
+        if (extension !is ArtistClient) {
+            println("ArtistClient is not implemented, skipping")
+            return@testIn
+        }
+        val artist = (extension as TrackClient).loadTrack(searchTrack(), false).artists.firstOrNull() ?: error("Track has no artist")
+        val loadedArtist = (extension as ArtistClient).loadArtist(artist)
+        println("Loaded Artist: $loadedArtist")
+        val feed = (extension as ArtistClient).loadFeed(loadedArtist)?.pagedDataOfFirst()?.loadPage(null)?.data
+        if (feed.isNullOrEmpty()) {
+            println("No feed found for artist")
+        } else {
+            feed.forEach {
+                println(it)
+            }
         }
     }
 
