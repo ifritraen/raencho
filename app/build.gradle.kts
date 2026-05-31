@@ -47,7 +47,10 @@ tasks.register("generateProguardRules") {
         generatedProguard.writeText(
             """
                 -dontobfuscate
-                -keep,allowoptimization class dev.brahmkshatriya.echo.extension.$extClass
+                -dontwarn **
+                -keep,allowoptimization class $extClass { *; }
+                -keep class dev.brahmkshatriya.echo.extension.** { *; }
+                -keep class org.jsoup.** { *; }
                 """.trimMargin()
         )
     }
@@ -68,7 +71,8 @@ android {
         manifestPlaceholders.apply {
             put("type", "dev.brahmkshatriya.echo.${extType}")
             put("id", extId)
-            put("class_path", "dev.brahmkshatriya.echo.extension.${extClass}")
+            put("class_path", extClass)
+
             put("version", verName)
             put("version_code", verCode.toString())
             put("icon_url", extIconUrl ?: "")
