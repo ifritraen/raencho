@@ -61,7 +61,8 @@ data class Credit(
 data class Tag(
     val id: String,
     val name: String,
-    val slug: String
+    val slug: String? = null,
+    val category: String? = null
 )
 
 @Serializable
