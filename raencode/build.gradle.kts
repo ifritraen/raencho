@@ -124,6 +124,13 @@ val extensionsList = listOf(
         name = "Literotica Audio",
         description = "Literotica Audio extension for Echo audio player.",
         iconUrl = "https://www.literotica.com/favicon.ico"
+    ),
+    ExtConfig(
+        id = "ragtag",
+        className = "dev.brahmkshatriya.echo.extension.Ragtag",
+        name = "Ragtag Archive",
+        description = "Ragtag Archive extension for Echo audio player.",
+        iconUrl = "https://archive.ragtag.moe/favicon.ico"
     )
 )
 
