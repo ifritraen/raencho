@@ -131,6 +131,13 @@ val extensionsList = listOf(
         name = "Ragtag Archive",
         description = "Ragtag Archive extension for Echo audio player.",
         iconUrl = "https://archive.ragtag.moe/favicon.ico"
+    ),
+    ExtConfig(
+        id = "lushstories",
+        className = "dev.brahmkshatriya.echo.extension.LushStories",
+        name = "Lush Stories Audio",
+        description = "Lush Stories Audio extension for Echo audio player.",
+        iconUrl = "https://www.lushstories.com/favicon.ico"
     )
 )
 
@@ -176,3 +183,9 @@ val buildAllExtensions by tasks.registering {
 fun execute(vararg command: String): String = providers.exec {
     commandLine(*command)
 }.standardOutput.asText.get().trim()
+
+tasks.withType<Test> {
+    testLogging {
+        events("passed", "skipped", "failed", "standardOut", "standardError")
+    }
+}
