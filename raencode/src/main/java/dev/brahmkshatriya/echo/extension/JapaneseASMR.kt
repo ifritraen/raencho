@@ -216,40 +216,112 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
     // TrackClient Implementation
     override suspend fun loadTracks(album: Album): Feed<Track>? = PagedData.Single {
         withContext(Dispatchers.IO) {
-            // Load full details of album to resolve the correct RJ Code
-            val loadedAlbum = loadAlbum(album)
-            val rjCode = loadedAlbum.extras["rj"] ?: ""
-            val streamUrl = "https://v.weeab0o.xyz/$rjCode.m3u8"
+            val id = album.extras["id"] ?: album.id
+            val request = Request.Builder()
+                .url("https://japaneseasmr.com/$id/")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
+            val response = httpClient.newCall(request).await()
+            if (!response.isSuccessful) return@withContext emptyList<Track>()
+            val html = response.body?.string() ?: return@withContext emptyList<Track>()
+            
+            val doc = Jsoup.parse(html)
+            val text = doc.selectFirst(".entry-content")?.text() ?: ""
+            val rjCode = "RJ\\d{6,8}".toRegex().find(doc.html() + " " + text)?.value ?: album.extras["rj"] ?: ""
 
-            listOf(
-                Track(
-                    id = loadedAlbum.id,
-                    title = loadedAlbum.title,
-                    cover = loadedAlbum.cover,
-                    album = loadedAlbum,
-                    artists = loadedAlbum.artists,
-                    duration = 0L,
-                    extras = mapOf("rj" to rjCode),
-                    streamables = listOf(
-                        Streamable(
-                            id = loadedAlbum.id,
-                            quality = 0,
-                            type = Streamable.MediaType.Server,
-                            title = loadedAlbum.title,
-                            extras = mapOf("rj" to rjCode)
+            // Group URLs by base name to avoid multiple formats (.mp3 vs .m4a) creating duplicate tracks
+            val baseToUrls = mutableMapOf<String, MutableList<String>>()
+
+            // 1. Scrape player elements
+            val players = doc.select("audio, video")
+            for (player in players) {
+                val sources = player.select("source")
+                for (source in sources) {
+                    val srcUrl = source.attr("src") ?: ""
+                    if (srcUrl.isNotEmpty() && (srcUrl.contains("weeab0o") || srcUrl.contains(".mp3") || srcUrl.contains(".m4a") || srcUrl.contains(".m3u8"))) {
+                        val cleanUrl = srcUrl.substringBefore("?")
+                        val base = cleanUrl.substringBeforeLast(".")
+                        if (base.isNotEmpty()) {
+                            baseToUrls.getOrPut(base) { mutableListOf() }.add(srcUrl)
+                        }
+                    }
+                }
+            }
+
+            // 2. Scrape script variables if no player elements found
+            if (baseToUrls.isEmpty()) {
+                val scriptTags = doc.select("script")
+                for (script in scriptTags) {
+                    val content = script.html()
+                    if (content.contains("audioSrc")) {
+                        val match = "audioSrc\\s*=\\s*'([^']+)'".toRegex().find(content)
+                            ?: "audioSrc\\s*=\\s*\"([^\"]+)\"".toRegex().find(content)
+                        val srcUrl = match?.groupValues?.get(1)
+                        if (!srcUrl.isNullOrEmpty()) {
+                            val base = srcUrl.substringBeforeLast(".")
+                            baseToUrls.getOrPut(base) { mutableListOf() }.add(srcUrl)
+                        }
+                    }
+                }
+            }
+
+            // 3. Fallback to standard RJ Code .m3u8 structure
+            if (baseToUrls.isEmpty() && rjCode.isNotEmpty()) {
+                val fallbackUrl = "https://v.weeab0o.xyz/$rjCode.m3u8"
+                baseToUrls.getOrPut("https://v.weeab0o.xyz/$rjCode") { mutableListOf() }.add(fallbackUrl)
+            }
+
+            val tracks = mutableListOf<Track>()
+            baseToUrls.entries.forEachIndexed { index, entry ->
+                val base = entry.key
+                val urls = entry.value
+
+                // Choose the best quality/format (prefer .m4a or .m3u8 or .mp3)
+                val bestUrl = urls.firstOrNull { it.contains(".m4a") }
+                    ?: urls.firstOrNull { it.contains(".m3u8") }
+                    ?: urls.firstOrNull { it.contains(".mp3") }
+                    ?: urls.first()
+
+                val filename = base.substringAfterLast("/")
+                val suffix = filename.substringAfter(rjCode).trim()
+                val partTitle = if (suffix.isNotEmpty()) suffix else "Main"
+                val trackTitle = if (baseToUrls.size > 1) "${album.title} - $partTitle" else album.title
+
+                val trackId = "${album.id}_$index"
+
+                tracks.add(
+                    Track(
+                        id = trackId,
+                        title = trackTitle,
+                        cover = album.cover,
+                        album = album,
+                        artists = album.artists,
+                        duration = 0L,
+                        extras = mapOf("src" to bestUrl),
+                        streamables = listOf(
+                            Streamable(
+                                id = trackId,
+                                quality = 0,
+                                type = Streamable.MediaType.Server,
+                                title = trackTitle,
+                                extras = mapOf("src" to bestUrl)
+                            )
                         )
                     )
                 )
-            )
+            }
+
+            tracks
         }
     }.toFeed()
 
     override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media {
         return withContext(Dispatchers.IO) {
-            val rjCode = streamable.extras["rj"] ?: ""
-            if (rjCode.isEmpty()) throw Exception("No RJ code found for streaming")
-            val streamUrl = "https://v.weeab0o.xyz/$rjCode.m3u8"
-            streamUrl.toServerMedia(
+            val srcUrl = streamable.extras["src"] ?: ""
+            if (srcUrl.isEmpty()) {
+                throw Exception("No streamable source found")
+            }
+            srcUrl.toServerMedia(
                 headers = mapOf(
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Referer" to "https://japaneseasmr.com/"
