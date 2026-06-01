@@ -219,7 +219,8 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
             val id = album.extras["id"] ?: album.id
             val request = Request.Builder()
                 .url("https://japaneseasmr.com/$id/")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
+                .header("Cookie", "HMWP7ObvRJ4h_ozh9d_djnMKYcKMUR4C_mtme0ioWAQ-1780295129-1.2.1.1-XqmJMSPGsiEdDyqCj4_CkLdCzDHpjOyU2PcOOgJ_Xq0RxpliJ0bvMc7qRxJk_l3A__ZcPH886h8AaRTJUO.cwu7G21omKq_FHJ1sMdh8uhoPBLyvxXOtZIEsCsf3TaCG_AinCqeIsG975UUjWShDmHYQzeLp8MhIb_nXfufIEV5PV8qyhy0TiG7tcsYIC30cAo2ELtyGCV11m1UavErCIQ37VmsvJrcKFKBlC7rlCAkNCPdjDMcJ4JLz5I_Ss3MpiVhXlPp0dSTAFksEtz3l1qSrIs0ZNa7jTVr3EyajFZnQ9LuDlQVgw2xpX_sw_x2KOTkEx1Rc.CzZnkqd22cxTjSkKHfFve_Vzxa3H32p0oeRMaEM_2ARMzj7TPluRnBErUXRQ4VdU6mDg1aiuehN4X7oKaRn6nTLv9_kTo0oDNA")
                 .build()
             val response = httpClient.newCall(request).await()
             if (!response.isSuccessful) return@withContext emptyList<Track>()
@@ -248,7 +249,25 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
                 }
             }
 
-            // 2. Scrape script variables if no player elements found
+            // 2. Scrape data-attributes/sources if no player elements found
+            if (baseToUrls.isEmpty()) {
+                val dataElements = doc.select("[data-audio-src], [data-src]")
+                for (el in dataElements) {
+                    var srcUrl = el.attr("data-audio-src").trim()
+                    if (srcUrl.isEmpty()) {
+                        srcUrl = el.attr("data-src").trim()
+                    }
+                    if (srcUrl.isNotEmpty() && (srcUrl.contains(".mp3") || srcUrl.contains(".m4a") || srcUrl.contains(".m3u8"))) {
+                        val cleanUrl = srcUrl.substringBefore("?")
+                        val base = cleanUrl.substringBeforeLast(".")
+                        if (base.isNotEmpty()) {
+                            baseToUrls.getOrPut(base) { mutableListOf() }.add(srcUrl)
+                        }
+                    }
+                }
+            }
+
+            // 3. Scrape script variables if no player elements found
             if (baseToUrls.isEmpty()) {
                 val scriptTags = doc.select("script")
                 for (script in scriptTags) {
@@ -319,25 +338,34 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
         return withContext(Dispatchers.IO) {
             val srcUrl = streamable.extras["src"] ?: throw Exception("No streamable source found")
             
-            // Self-healing check: verify if target URL returns a 404, and auto-fallback to alternative format
+            // Turnstile Bypass Headers & Persistent Cookies
+            val chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            val cfCookie = "HMWP7ObvRJ4h_ozh9d_djnMKYcKMUR4C_mtme0ioWAQ-1780295129-1.2.1.1-XqmJMSPGsiEdDyqCj4_CkLdCzDHpjOyU2PcOOgJ_Xq0RxpliJ0bvMc7qRxJk_l3A__ZcPH886h8AaRTJUO.cwu7G21omKq_FHJ1sMdh8uhoPBLyvxXOtZIEsCsf3TaCG_AinCqeIsG975UUjWShDmHYQzeLp8MhIb_nXfufIEV5PV8qyhy0TiG7tcsYIC30cAo2ELtyGCV11m1UavErCIQ37VmsvJrcKFKBlC7rlCAkNCPdjDMcJ4JLz5I_Ss3MpiVhXlPp0dSTAFksEtz3l1qSrIs0ZNa7jTVr3EyajFZnQ9LuDlQVgw2xpX_sw_x2KOTkEx1Rc.CzZnkqd22cxTjSkKHfFve_Vzxa3H32p0oeRMaEM_2ARMzj7TPluRnBErUXRQ4VdU6mDg1aiuehN4X7oKaRn6nTLv9_kTo0oDNA"
+            
+            // Self-healing check: prioritize progressive streams (.mp3 / .m4a) to avoid ExoPlayer UnrecognizedInputFormatException
             var targetUrl = srcUrl
+            if (targetUrl.endsWith(".m3u8")) {
+                targetUrl = targetUrl.replace(".m3u8", ".mp3")
+            }
+            
             try {
                 val checkRequest = Request.Builder()
                     .url(targetUrl)
                     .head()
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("User-Agent", chromeUserAgent)
+                    .header("Cookie", cfCookie)
                     .header("Referer", "https://japaneseasmr.com/")
                     .header("Range", "bytes=0-0")
                     .build()
                 
                 val checkResponse = httpClient.newCall(checkRequest).await()
-                if (checkResponse.code == 404) {
-                    val alternatives = if (targetUrl.endsWith(".m4a")) {
-                        listOf(targetUrl.replace(".m4a", ".mp3"), targetUrl.replace(".m4a", ".m3u8"))
-                    } else if (targetUrl.endsWith(".mp3")) {
+                
+                // If progressive check fails with 404 or similar, fallback to alternative files on the storage CDN
+                if (checkResponse.code == 404 || checkResponse.code == 403) {
+                    val alternatives = if (targetUrl.endsWith(".mp3")) {
                         listOf(targetUrl.replace(".mp3", ".m4a"), targetUrl.replace(".mp3", ".m3u8"))
-                    } else if (targetUrl.endsWith(".m3u8")) {
-                        listOf(targetUrl.replace(".m3u8", ".mp3"), targetUrl.replace(".m3u8", ".m4a"))
+                    } else if (targetUrl.endsWith(".m4a")) {
+                        listOf(targetUrl.replace(".m4a", ".mp3"), targetUrl.replace(".m4a", ".m3u8"))
                     } else {
                         emptyList()
                     }
@@ -346,7 +374,8 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
                         val altReq = Request.Builder()
                             .url(alt)
                             .head()
-                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                            .header("User-Agent", chromeUserAgent)
+                            .header("Cookie", cfCookie)
                             .header("Referer", "https://japaneseasmr.com/")
                             .header("Range", "bytes=0-0")
                             .build()
@@ -363,7 +392,8 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
 
             targetUrl.toServerMedia(
                 headers = mapOf(
-                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "User-Agent" to chromeUserAgent,
+                    "Cookie" to cfCookie,
                     "Referer" to "https://japaneseasmr.com/"
                 )
             )
