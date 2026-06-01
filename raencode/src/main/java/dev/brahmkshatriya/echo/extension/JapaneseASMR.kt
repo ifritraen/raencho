@@ -20,6 +20,7 @@ import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toServer
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.settings.Setting
+import dev.brahmkshatriya.echo.common.settings.SettingTextInput
 import dev.brahmkshatriya.echo.common.settings.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,16 +37,23 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
 
     private lateinit var settings: Settings
 
-    // Persistent long-lived Cloudflare clearance cookie for bypass
-    private val cfCookie = "HMWP7ObvRJ4h_ozh9d_djnMKYcKMUR4C_mtme0ioWAQ-1780295129-1.2.1.1-XqmJMSPGsiEdDyqCj4_CkLdCzDHpjOyU2PcOOgJ_Xq0RxpliJ0bvMc7qRxJk_l3A__ZcPH886h8AaRTJUO.cwu7G21omKq_FHJ1sMdh8uhoPBLyvxXOtZIEsCsf3TaCG_AinCqeIsG975UUjWShDmHYQzeLp8MhIb_nXfufIEV5PV8qyhy0TiG7tcsYIC30cAo2ELtyGCV11m1UavErCIQ37VmsvJrcKFKBlC7rlCAkNCPdjDMcJ4JLz5I_Ss3MpiVhXlPp0dSTAFksEtz3l1qSrIs0ZNa7jTVr3EyajFZnQ9LuDlQVgw2xpX_sw_x2KOTkEx1Rc.CzZnkqd22cxTjSkKHfFve_Vzxa3H32p0oeRMaEM_2ARMzj7TPluRnBErUXRQ4VdU6mDg1aiuehN4X7oKaRn6nTLv9_kTo0oDNA"
-    private val chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+    // CF clearance cookie - read from user settings (paste fresh value from browser)
+    private val cfCookie: String get() = settings.getString("cf_clearance") ?: ""
+    private val chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
     override fun setSettings(settings: Settings) {
         this.settings = settings
     }
 
     override suspend fun getSettingItems(): List<Setting> {
-        return emptyList()
+        return listOf(
+            SettingTextInput(
+                title = "CF Clearance Cookie",
+                key = "cf_clearance",
+                summary = "Paste the 'cf_clearance' cookie value from your browser (visit japaneseasmr.com, open DevTools > Application > Cookies)",
+                defaultValue = ""
+            )
+        )
     }
 
     private fun parsePosts(html: String): List<Album> {
