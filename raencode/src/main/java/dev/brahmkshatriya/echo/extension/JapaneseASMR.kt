@@ -91,12 +91,15 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
     override suspend fun loadHomeFeed(): Feed<Shelf> = PagedData.Single {
         withContext(Dispatchers.IO) {
             val shelves = mutableListOf<Shelf>()
+            val chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            val cfCookie = "HMWP7ObvRJ4h_ozh9d_djnMKYcKMUR4C_mtme0ioWAQ-1780295129-1.2.1.1-XqmJMSPGsiEdDyqCj4_CkLdCzDHpjOyU2PcOOgJ_Xq0RxpliJ0bvMc7qRxJk_l3A__ZcPH886h8AaRTJUO.cwu7G21omKq_FHJ1sMdh8uhoPBLyvxXOtZIEsCsf3TaCG_AinCqeIsG975UUjWShDmHYQzeLp8MhIb_nXfufIEV5PV8qyhy0TiG7tcsYIC30cAo2ELtyGCV11m1UavErCIQ37VmsvJrcKFKBlC7rlCAkNCPdjDMcJ4JLz5I_Ss3MpiVhXlPp0dSTAFksEtz3l1qSrIs0ZNa7jTVr3EyajFZnQ9LuDlQVgw2xpX_sw_x2KOTkEx1Rc.CzZnkqd22cxTjSkKHfFve_Vzxa3H32p0oeRMaEM_2ARMzj7TPluRnBErUXRQ4VdU6mDg1aiuehN4X7oKaRn6nTLv9_kTo0oDNA"
 
             // 1. Recent Posts Shelf
             try {
                 val request = Request.Builder()
                     .url("https://japaneseasmr.com/")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("User-Agent", chromeUserAgent)
+                    .header("Cookie", cfCookie)
                     .build()
                 val response = httpClient.newCall(request).await()
                 if (response.isSuccessful) {
@@ -120,7 +123,8 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
             try {
                 val request = Request.Builder()
                     .url("https://japaneseasmr.com/?orderby=post_views&order=desc")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("User-Agent", chromeUserAgent)
+                    .header("Cookie", cfCookie)
                     .build()
                 val response = httpClient.newCall(request).await()
                 if (response.isSuccessful) {
@@ -153,10 +157,13 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
             } else {
                 "https://japaneseasmr.com/page/$page/?s=${java.net.URLEncoder.encode(query, "UTF-8")}"
             }
+            val chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            val cfCookie = "HMWP7ObvRJ4h_ozh9d_djnMKYcKMUR4C_mtme0ioWAQ-1780295129-1.2.1.1-XqmJMSPGsiEdDyqCj4_CkLdCzDHpjOyU2PcOOgJ_Xq0RxpliJ0bvMc7qRxJk_l3A__ZcPH886h8AaRTJUO.cwu7G21omKq_FHJ1sMdh8uhoPBLyvxXOtZIEsCsf3TaCG_AinCqeIsG975UUjWShDmHYQzeLp8MhIb_nXfufIEV5PV8qyhy0TiG7tcsYIC30cAo2ELtyGCV11m1UavErCIQ37VmsvJrcKFKBlC7rlCAkNCPdjDMcJ4JLz5I_Ss3MpiVhXlPp0dSTAFksEtz3l1qSrIs0ZNa7jTVr3EyajFZnQ9LuDlQVgw2xpX_sw_x2KOTkEx1Rc.CzZnkqd22cxTjSkKHfFve_Vzxa3H32p0oeRMaEM_2ARMzj7TPluRnBErUXRQ4VdU6mDg1aiuehN4X7oKaRn6nTLv9_kTo0oDNA"
 
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("User-Agent", chromeUserAgent)
+                .header("Cookie", cfCookie)
                 .build()
 
             val response = httpClient.newCall(request).await()
@@ -183,9 +190,13 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
     override suspend fun loadAlbum(album: Album): Album {
         return withContext(Dispatchers.IO) {
             val id = album.extras["id"] ?: album.id
+            val chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            val cfCookie = "HMWP7ObvRJ4h_ozh9d_djnMKYcKMUR4C_mtme0ioWAQ-1780295129-1.2.1.1-XqmJMSPGsiEdDyqCj4_CkLdCzDHpjOyU2PcOOgJ_Xq0RxpliJ0bvMc7qRxJk_l3A__ZcPH886h8AaRTJUO.cwu7G21omKq_FHJ1sMdh8uhoPBLyvxXOtZIEsCsf3TaCG_AinCqeIsG975UUjWShDmHYQzeLp8MhIb_nXfufIEV5PV8qyhy0TiG7tcsYIC30cAo2ELtyGCV11m1UavErCIQ37VmsvJrcKFKBlC7rlCAkNCPdjDMcJ4JLz5I_Ss3MpiVhXlPp0dSTAFksEtz3l1qSrIs0ZNa7jTVr3EyajFZnQ9LuDlQVgw2xpX_sw_x2KOTkEx1Rc.CzZnkqd22cxTjSkKHfFve_Vzxa3H32p0oeRMaEM_2ARMzj7TPluRnBErUXRQ4VdU6mDg1aiuehN4X7oKaRn6nTLv9_kTo0oDNA"
+
             val request = Request.Builder()
                 .url("https://japaneseasmr.com/$id/")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("User-Agent", chromeUserAgent)
+                .header("Cookie", cfCookie)
                 .build()
             val response = httpClient.newCall(request).await()
             if (!response.isSuccessful) return@withContext album

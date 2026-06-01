@@ -43,25 +43,78 @@ import javax.crypto.spec.SecretKeySpec
 
 class Hotaudio : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, SearchFeedClient {
 
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .cookieJar(object : okhttp3.CookieJar {
-            private val cookieStore = HashMap<String, List<okhttp3.Cookie>>()
-            override fun saveFromResponse(url: okhttp3.HttpUrl, cookies: List<okhttp3.Cookie>) {
-                cookieStore[url.host] = cookies
-            }
-            override fun loadForRequest(url: okhttp3.HttpUrl): List<okhttp3.Cookie> {
-                return cookieStore[url.host] ?: emptyList()
-            }
-        })
-        .build()
-        
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
     }
+
+    private val cookiesList = java.util.concurrent.CopyOnWriteArrayList<okhttp3.Cookie>()
+    private var customUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    init {
+        try {
+            val file = listOf(
+                java.io.File("hotaudio_cookies.json"),
+                java.io.File("../hotaudio_cookies.json"),
+                java.io.File("d:\\C\\p6\\echo-extension\\hotaudio_cookies.json")
+            ).firstOrNull { it.exists() }
+            if (file != null) {
+                val data = json.decodeFromString<dev.brahmkshatriya.echo.extension.hotaudio.CookieData>(file.readText())
+                customUserAgent = data.user_agent
+                
+                val cookie = okhttp3.Cookie.Builder()
+                    .domain("hotaudio.net")
+                    .path("/")
+                    .name("cf_clearance")
+                    .value(data.cf_clearance)
+                    .secure()
+                    .httpOnly()
+                    .build()
+                cookiesList.add(cookie)
+                println("SUCCESSFULLY LOADED CLOUDFLARE COOKIES AND UA: UA=$customUserAgent, COOKIE=${data.cf_clearance}")
+            } else {
+                println("NO COOKIE FILE FOUND AT PATHS")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val builder = original.newBuilder()
+            if (original.header("User-Agent") == null) {
+                builder.header("User-Agent", customUserAgent)
+            }
+            if (original.header("Accept") == null) {
+                builder.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+            }
+            if (original.header("Accept-Language") == null) {
+                builder.header("Accept-Language", "en-US,en;q=0.9")
+            }
+            chain.proceed(builder.build())
+        }
+        .cookieJar(object : okhttp3.CookieJar {
+            override fun saveFromResponse(url: okhttp3.HttpUrl, cookies: List<okhttp3.Cookie>) {
+                println("COOKIEJAR SAVE: url=${url}, cookies=$cookies")
+                cookiesList.removeAll { oldCookie ->
+                    cookies.any { newCookie -> newCookie.name == oldCookie.name && newCookie.domain == oldCookie.domain }
+                }
+                cookiesList.addAll(cookies)
+            }
+            override fun loadForRequest(url: okhttp3.HttpUrl): List<okhttp3.Cookie> {
+                val matched = cookiesList.filter { it.matches(url) }
+                println("COOKIEJAR LOAD: url=${url}, matched=$matched")
+                return matched
+            }
+        })
+        .build()
+        
 
     private lateinit var settings: Settings
 
@@ -333,18 +386,20 @@ class Hotaudio : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sear
         return data
     }
 
-    private fun aesGcmEncrypt(plaintext: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
-        val secretKey = SecretKeySpec(key, "AES")
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        val spec = javax.crypto.spec.GCMParameterSpec(128, iv)
+    // ChaCha20-Poly1305 encrypt (matches browser Ce cipher: blockSize=64, nonceLength=12, tagLength=16)
+    private fun chaCha20Poly1305Encrypt(plaintext: ByteArray, key: ByteArray, nonce: ByteArray): ByteArray {
+        val secretKey = SecretKeySpec(key, "ChaCha20")
+        val spec = javax.crypto.spec.IvParameterSpec(nonce)
+        val cipher = Cipher.getInstance("ChaCha20-Poly1305/None/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec)
         return cipher.doFinal(plaintext)
     }
 
-    private fun aesGcmDecrypt(ciphertext: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
-        val secretKey = SecretKeySpec(key, "AES")
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        val spec = javax.crypto.spec.GCMParameterSpec(128, iv)
+    // ChaCha20-Poly1305 decrypt
+    private fun chaCha20Poly1305Decrypt(ciphertext: ByteArray, key: ByteArray, nonce: ByteArray): ByteArray {
+        val secretKey = SecretKeySpec(key, "ChaCha20")
+        val spec = javax.crypto.spec.IvParameterSpec(nonce)
+        val cipher = Cipher.getInstance("ChaCha20-Poly1305/None/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
         return cipher.doFinal(ciphertext)
     }
@@ -396,28 +451,33 @@ class Hotaudio : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sear
             var targetTick = tick
             var targetServerKey = serverKey
 
-            // Execute ECDH key agreement
+            // Execute ECDH key agreement (X25519)
             val privA = X25519.generatePrivateKey()
             val pubA = X25519.getPublicKey(privA)
             val pubAStr = pubA.joinToString("") { "%02x".format(it) }
 
-            // Calculate shared secret and derive session key
+            // Calculate shared secret and derive session key via SHA-256
             val serverKeyBytes = targetServerKey.hexToByteArray()
             val sharedSecret = X25519.calculateSharedSecret(privA, serverKeyBytes)
             val md = MessageDigest.getInstance("SHA-256")
             val sessionKey = md.digest(sharedSecret)
 
-            // Generate payload: {"tid":"$tid","pid":"$pid","key":"$key","tick":"$tick","first":-1}
+            // Generate payload JSON
             val payload = """{"tid":"$targetTid","pid":"$targetPid","key":"$targetKey","tick":"$targetTick","first":-1}"""
             val signature = HotaudioVm().sign(payload)
 
-            // Derive IV/nonce from signature
+            println("DEBUG loadStreamableMedia: extras=${streamable.extras}")
+            println("DEBUG PAYLOAD: $payload")
+            println("DEBUG SIGNATURE: $signature")
+            println("DEBUG X-Key: $pubAStr")
+
+            // Derive nonce: SHA-256 of signature UTF-8 bytes, take first 12 bytes (matches browser: Ae(E).slice(0,12))
             val signatureBytes = signature.toByteArray(Charsets.UTF_8)
             val signatureHash = md.digest(signatureBytes)
             val nonce = signatureHash.copyOfRange(0, 12)
 
-            // Encrypt request body
-            val encryptedPayload = aesGcmEncrypt(payload.toByteArray(Charsets.UTF_8), sessionKey, nonce)
+            // Encrypt request body with ChaCha20-Poly1305 (matches browser Ce cipher)
+            val encryptedPayload = chaCha20Poly1305Encrypt(payload.toByteArray(Charsets.UTF_8), sessionKey, nonce)
 
             val listenUrl = "https://hotaudio.net/api/v1/audio/listen?key=$targetKey"
             
@@ -438,7 +498,7 @@ class Hotaudio : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sear
                 .addHeader("X-Signature", signature)
                 .addHeader("X-Key", pubAStr)
                 .addHeader("Content-Type", "application/vnd.hotaudio.crypt+json")
-                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .addHeader("User-Agent", customUserAgent)
                 .addHeader("Referer", "https://hotaudio.net/")
                 .addHeader("Origin", "https://hotaudio.net")
                 .addHeader("Accept", "*/*")
@@ -448,8 +508,12 @@ class Hotaudio : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sear
             val isEncrypted = resp.header("Content-Type")?.contains("application/vnd.hotaudio.crypt+json") == true
             
             val respBytes = resp.body?.bytes() ?: ByteArray(0)
+            println("LISTEN RESPONSE: status=${resp.code}, encrypted=$isEncrypted, bodyLen=${respBytes.size}")
             val decryptedBytes = if (isEncrypted) {
-                aesGcmDecrypt(respBytes, sessionKey, nonce)
+                // Browser increments nonce[0] for response decryption (k[0]++)
+                val decNonce = nonce.clone()
+                decNonce[0] = (decNonce[0] + 1).toByte()
+                chaCha20Poly1305Decrypt(respBytes, sessionKey, decNonce)
             } else {
                 respBytes
             }
@@ -462,7 +526,7 @@ class Hotaudio : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sear
             // Build Streamable.Media
             listenResponse.url.toServerMedia(
                 headers = mapOf(
-                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    "User-Agent" to customUserAgent
                 )
             )
         }

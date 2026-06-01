@@ -26,3 +26,10 @@ data class HaListenResponse(
     val length15s: Int? = 0,
     val allowed: Boolean? = true
 )
+
+@Serializable
+data class CookieData(
+    val cf_clearance: String,
+    val user_agent: String
+)
+
