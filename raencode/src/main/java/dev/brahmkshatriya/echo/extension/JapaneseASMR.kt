@@ -317,11 +317,51 @@ class JapaneseASMR : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, 
 
     override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media {
         return withContext(Dispatchers.IO) {
-            val srcUrl = streamable.extras["src"] ?: ""
-            if (srcUrl.isEmpty()) {
-                throw Exception("No streamable source found")
+            val srcUrl = streamable.extras["src"] ?: throw Exception("No streamable source found")
+            
+            // Self-healing check: verify if target URL returns a 404, and auto-fallback to alternative format
+            var targetUrl = srcUrl
+            try {
+                val checkRequest = Request.Builder()
+                    .url(targetUrl)
+                    .head()
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Referer", "https://japaneseasmr.com/")
+                    .header("Range", "bytes=0-0")
+                    .build()
+                
+                val checkResponse = httpClient.newCall(checkRequest).await()
+                if (checkResponse.code == 404) {
+                    val alternatives = if (targetUrl.endsWith(".m4a")) {
+                        listOf(targetUrl.replace(".m4a", ".mp3"), targetUrl.replace(".m4a", ".m3u8"))
+                    } else if (targetUrl.endsWith(".mp3")) {
+                        listOf(targetUrl.replace(".mp3", ".m4a"), targetUrl.replace(".mp3", ".m3u8"))
+                    } else if (targetUrl.endsWith(".m3u8")) {
+                        listOf(targetUrl.replace(".m3u8", ".mp3"), targetUrl.replace(".m3u8", ".m4a"))
+                    } else {
+                        emptyList()
+                    }
+                    
+                    for (alt in alternatives) {
+                        val altReq = Request.Builder()
+                            .url(alt)
+                            .head()
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                            .header("Referer", "https://japaneseasmr.com/")
+                            .header("Range", "bytes=0-0")
+                            .build()
+                        val altResp = httpClient.newCall(altReq).await()
+                        if (altResp.isSuccessful || altResp.code == 206) {
+                            targetUrl = alt
+                            break
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            srcUrl.toServerMedia(
+
+            targetUrl.toServerMedia(
                 headers = mapOf(
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Referer" to "https://japaneseasmr.com/"
