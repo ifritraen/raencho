@@ -138,6 +138,13 @@ val extensionsList = listOf(
         name = "Lush Stories Audio",
         description = "Lush Stories Audio extension for Echo audio player.",
         iconUrl = "https://www.lushstories.com/favicon.ico"
+    ),
+    ExtConfig(
+        id = "japaneseasmr",
+        className = "dev.brahmkshatriya.echo.extension.JapaneseASMR",
+        name = "JapaneseASMR",
+        description = "JapaneseASMR extension for Echo audio player.",
+        iconUrl = "https://japaneseasmr.com/wp-content/uploads/2021/01/logo.png"
     )
 )
 
