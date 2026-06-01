@@ -171,7 +171,7 @@ class Audiochan : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sea
             val responseBody = response.body?.string() ?: return@withContext album
 
             try {
-                val item = json.decodeFromString<AudiochanResponse<AudiochanItem>>(responseBody).data
+                val item = json.decodeFromString<AudiochanItem>(responseBody)
                 item.toAlbum()
             } catch (e: Exception) {
                 album
@@ -191,7 +191,7 @@ class Audiochan : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sea
             val responseBody = response.body?.string() ?: return@withContext emptyList<Track>()
 
             try {
-                val item = json.decodeFromString<AudiochanResponse<AudiochanItem>>(responseBody).data
+                val item = json.decodeFromString<AudiochanItem>(responseBody)
                 listOf(item.toTrack(album))
             } catch (e: Exception) {
                 emptyList()
@@ -208,7 +208,7 @@ class Audiochan : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sea
             if (!response.isSuccessful) throw Exception("Failed to load streamable media: ${response.code}")
             val responseBody = response.body?.string() ?: throw Exception("Empty streamable response body")
 
-            val item = json.decodeFromString<AudiochanResponse<AudiochanItem>>(responseBody).data
+            val item = json.decodeFromString<AudiochanItem>(responseBody)
             val streamUrl = item.audioFile?.url ?: throw Exception("No streamable URL found")
             streamUrl.toServerMedia()
         }
@@ -231,7 +231,7 @@ class Audiochan : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sea
             val responseBody = response.body?.string() ?: return@withContext Page(emptyList(), null)
 
             try {
-                val searchResponse = json.decodeFromString<AudiochanResponse<SearchResponse>>(responseBody).data
+                val searchResponse = json.decodeFromString<SearchResponse>(responseBody)
                 val items = searchResponse.audios.data.map { it.toAlbum() }
                 val nextPage = if (items.isNotEmpty()) (page + 1).toString() else null
                 
@@ -246,6 +246,7 @@ class Audiochan : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Sea
                     continuation = nextPage
                 )
             } catch (e: Exception) {
+                e.printStackTrace()
                 Page(emptyList(), null)
             }
         }
